@@ -32,10 +32,11 @@ const DrawComponent = () => {
   const selfProximityThreshold = 10 
 
   useEffect(() => {
-    const c1 = WingedEdgeGraph.createCross(new Point(600, 400))
-    modelRef.current = new WingedEdgeGraph([...c1.nodes]);
-    setLines(c1.edges.map(edge => [edge.src.pt, edge.dst.pt]))
-    setNodes(modelRef.current.nodes)
+    modelRef.current = new WingedEdgeGraph([], []);
+    const c1 = modelRef.current.createCross(new Point(600, 400))
+    const c2 = modelRef.current.createCross(new Point(900, 400))
+    setLines([...c1.edges.map(edge => [edge.src.pt, edge.dst.pt]), ...c2.edges.map(edge => [edge.src.pt, edge.dst.pt])])
+    setNodes([...c1.nodes, ...c2.nodes])
   }, []); // Empty dependency array ensures this runs once, when the component mounts
   
   // Function to calculate the distance between two points
@@ -159,15 +160,12 @@ const DrawComponent = () => {
       if (newLine.length > 1) {
         // prevent duplicate points in the polyline
         if (pos.x === newLine[newLine.length - 2].x && pos.y === newLine[newLine.length - 2].y) {
-          console.log("Same as last point")
           return
         }
 
         const node = isCloseToFreeNode(pos)
         if (node) {
-          console.log("At node")
           if (node !== startNodeRef.current) {
-            console.log("Adding super edge")
             const {p1:left, p2:right, p3:mid} = modelRef.current.addSuperEdge(startNodeRef.current, node, newLine.slice(1))
             setNodes(modelRef.current.nodes)
             setLines([...lines, [...newLine, node.pt], [mid, left], [mid, right]])
@@ -176,15 +174,12 @@ const DrawComponent = () => {
             return
           }
         } else {
-          console.log("left node")
           if (isLineTooCloseToItself(newLine) || doesLineIntersectWithItself(newLine)) {
-            console.log("Too close/intersect with self")
             setIsDrawing(false)
             setCurrentLine([])
             return
           }
           if (isLineTooCloseToOtherLines(newLine) || doesLineIntersectWithOtherLines(newLine)) {
-            console.log("Too close/intersect with other line")
             setIsDrawing(false)
             setCurrentLine([])
             return

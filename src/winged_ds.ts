@@ -109,12 +109,57 @@ function isReversedPolyline(p1:Array<Point>, p2:Array<Point>):boolean {
     return true
 }
 
+function isPointOnPolygon(p:Point, pts:Array<Point>) {
+    for (const pt of pts) {
+        if (p.x === pt.x && p.y === pt.y) {
+            return true
+        }
+    }
+    return false
+}
+
+function isCCW(points:Array<Point>):boolean|undefined {
+    let area = 0;
+    const n = points.length;
+    
+    for (let i = 0; i < n; i++) {
+        const {x:x1, y:y1} = points[i];
+        const {x:x2, y:y2} = points[(i + 1) % n]; // next point, with wraparound
+        area += x1 * y2 - y1 * x2;
+    }
+
+    if (area > 0) {
+        return false
+    } else if (area < 0) {
+        return true
+    }
+}
+
+function isPointInPolygon(point:Point, polygonPoints:Array<Point>):boolean {
+    const {x, y} = point;
+    let inside = false;
+    const n = polygonPoints.length;
+    
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+        const {x:xi, y:yi} = polygonPoints[i];
+        const {x:xj, y:yj} = polygonPoints[j];
+        
+        if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
+            inside = !inside;
+        }
+    }
+    
+    return inside;
+}
+
 export class WingedEdgeGraph {
     nodes:Array<WdsNode>
+    wingedEdges:Array<WdsWingedEdge>
     numFaces:number
     // expects some already properly initialized graph as an edge list (bc no isolated vertices)
-    constructor(nodes:Array<WdsNode>) {
+    constructor(nodes:Array<WdsNode>, wingedEdges:Array<WdsWingedEdge>) {
         this.nodes=nodes
+        this.wingedEdges=wingedEdges
         this.numFaces=1
     }
 
@@ -216,73 +261,159 @@ export class WingedEdgeGraph {
         return leafNode.outEdges[0].dst
     }
 
+    static getPolygon(startEdge:WdsWingedEdge, currEdge:WdsWingedEdge, prevEdge:WdsWingedEdge, polyline:Array<Point>):void {
+        if (currEdge === startEdge) {
+            polyline.push(...currEdge.polyline)
+            return
+        }
+        if (WingedEdgeGraph.getDeg(currEdge.dst) === 4) {
+            polyline.push(...currEdge.polyline)
+            const wingedOutEdges = currEdge.dst.outEdges.filter(edge => (edge !== WingedEdgeGraph.getReversedEdge(currEdge) 
+                    && edge instanceof WdsWingedEdge))
+            if (currEdge.leftSucc instanceof WdsWingedEdge) {
+                    WingedEdgeGraph.getPolygon(startEdge, currEdge.leftSucc, currEdge, polyline)
+            } else {
+                const next = wingedOutEdges.find(edge => edge !== currEdge.rightSucc)
+                if (next !== undefined && next instanceof WdsWingedEdge) {
+                    WingedEdgeGraph.getPolygon(startEdge, next, currEdge, polyline)
+                }
+            }
+        } else if (currEdge.leftSucc instanceof WdsWingedEdge) {
+            polyline.push(...currEdge.polyline)
+            WingedEdgeGraph.getPolygon(startEdge, currEdge.leftSucc, currEdge, polyline)
+        } else if (currEdge.rightSucc instanceof WdsWingedEdge) {
+            polyline.push(...currEdge.polyline)
+            WingedEdgeGraph.getPolygon(startEdge, currEdge.rightSucc, currEdge, polyline)
+        } else if (WingedEdgeGraph.getDeg(currEdge.dst) === 3) {
+            const currEdgeReverse = WingedEdgeGraph.getReversedEdge(currEdge)
+            if (currEdgeReverse instanceof WdsWingedEdge) {
+                if (prevEdge === currEdge.rightPred && 
+                        currEdgeReverse.rightSucc instanceof WdsWingedEdge) {
+                    WingedEdgeGraph.getPolygon(startEdge, currEdgeReverse.rightSucc, currEdge, polyline)
+                } else if (prevEdge === currEdge.leftPred &&
+                        currEdgeReverse.leftSucc instanceof WdsWingedEdge) {
+                    WingedEdgeGraph.getPolygon(startEdge, currEdgeReverse.leftSucc, currEdge, polyline)
+                }
+            }
+        }
+    }
+
     // DFS traversal for updating faces after adding a super edge
     // O(n) where n = # of nodes
-    dfs(startEdge:WdsWingedEdge, currEdge:WdsWingedEdge, prevEdge:WdsWingedEdge):number|undefined {
+    dfs(startEdge:WdsWingedEdge, currEdge:WdsWingedEdge, prevEdge:WdsWingedEdge, isCcw:boolean):number|undefined {
         if (currEdge === startEdge) {
-            startEdge.faceLeft = this.numFaces++
+            if (isCcw) {
+                startEdge.faceLeft = this.numFaces++
+            } else {
+                startEdge.faceRight = this.numFaces++
+            }
             const startEdgeReverse = WingedEdgeGraph.getReversedEdge(startEdge)
             if (startEdgeReverse instanceof WdsWingedEdge) {
-                startEdgeReverse.faceRight = startEdge.faceLeft
+                if (isCcw) {
+                    startEdgeReverse.faceRight = startEdge.faceLeft
+                } else {
+                    startEdgeReverse.faceLeft = startEdge.faceRight
+                }
             }
-            return startEdge.faceLeft
+            return (isCcw) ? startEdge.faceLeft : startEdge.faceRight
         }
-        if (currEdge.leftSucc instanceof WdsWingedEdge) {
-            const res = this.dfs(startEdge, currEdge.leftSucc, currEdge)
-            if (res) {
-                currEdge.faceLeft = res
-                const currEdgeReverse = WingedEdgeGraph.getReversedEdge(currEdge)
-                if (currEdgeReverse instanceof WdsWingedEdge) {
-                    currEdgeReverse.faceRight = res
+        if (WingedEdgeGraph.getDeg(currEdge.dst) === 4) {
+            let res:number|undefined
+            const wingedOutEdges = currEdge.dst.outEdges.filter(edge => (edge !== WingedEdgeGraph.getReversedEdge(currEdge) 
+                    && edge instanceof WdsWingedEdge))
+            if (isCcw && currEdge.leftSucc instanceof WdsWingedEdge) {
+                res = this.dfs(startEdge, currEdge.leftSucc, currEdge, isCcw)
+            } else if (!isCcw && currEdge.rightSucc instanceof WdsWingedEdge) {
+                res = this.dfs(startEdge, currEdge.rightSucc, currEdge, isCcw)
+            } else {
+                const next = wingedOutEdges.find(edge => edge !== (isCcw ? currEdge.rightSucc : currEdge.leftSucc))
+                if (next !== undefined && next instanceof WdsWingedEdge) {
+                    res = this.dfs(startEdge, next, currEdge, isCcw)
                 }
-                return res
             }
-        } else if (currEdge.rightSucc instanceof WdsWingedEdge) {
-            const res = this.dfs(startEdge, currEdge.rightSucc, currEdge)
             if (res) {
-                currEdge.faceLeft = res
-                const currEdgeReverse = WingedEdgeGraph.getReversedEdge(currEdge)
-                if (currEdgeReverse instanceof WdsWingedEdge) {
-                    currEdgeReverse.faceRight = res
+                if (isCcw) {
+                    currEdge.faceLeft = res
+                } else {
+                    currEdge.faceRight = res
                 }
-                return res
-            }
-        } else {
-            if (WingedEdgeGraph.getDeg(currEdge.dst) === 3) {
                 const currEdgeReverse = WingedEdgeGraph.getReversedEdge(currEdge)
                 if (currEdgeReverse instanceof WdsWingedEdge) {
-                    if (prevEdge === currEdge.rightPred && 
-                            currEdgeReverse.rightSucc instanceof WdsWingedEdge) {
-                        const res = this.dfs(startEdge, currEdgeReverse.rightSucc, currEdge)
-                        if (res) {
-                            currEdge.faceLeft = res
-                            currEdge.faceRight = res
-                            currEdgeReverse.faceLeft = res
-                            currEdgeReverse.faceRight = res
-                            return res
-                        }
-                    } else if (prevEdge === currEdge.leftPred &&
-                            currEdgeReverse.leftSucc instanceof WdsWingedEdge) {
-                        const res = this.dfs(startEdge, currEdgeReverse.leftSucc, currEdge)
-                        if (res) {
-                            currEdge.faceLeft = res
-                            currEdge.faceRight = res
-                            currEdgeReverse.faceLeft = res
-                            currEdgeReverse.faceRight = res
-                            return res
-                        }
+                    if (isCcw) {
+                        currEdgeReverse.faceRight = res
+                    } else {
+                        currEdgeReverse.faceLeft = res
                     }
                 }
-            } else if (WingedEdgeGraph.getDeg(currEdge.dst) === 4) {
-                const next = currEdge.dst.outEdges.filter(edge => (edge !== currEdge && edge instanceof WdsWingedEdge))[0]
-                if (next instanceof WdsWingedEdge) {
-                    const res = this.dfs(startEdge, next, currEdge)
+                return res
+            }
+        } else if ((isCcw && currEdge.leftSucc instanceof WdsWingedEdge) || (!isCcw && currEdge.rightSucc instanceof WdsWingedEdge)) {
+            let res:number|undefined
+            if (isCcw && currEdge.leftSucc instanceof WdsWingedEdge) {
+                res = this.dfs(startEdge, currEdge.leftSucc, currEdge, isCcw)
+            } else if (currEdge.rightSucc instanceof WdsWingedEdge) {
+                res = this.dfs(startEdge, currEdge.rightSucc, currEdge, isCcw)
+            }
+            if (res) {
+                if (isCcw) {
+                    currEdge.faceLeft = res
+                } else {
+                    currEdge.faceRight = res
+                }
+                const currEdgeReverse = WingedEdgeGraph.getReversedEdge(currEdge)
+                if (currEdgeReverse instanceof WdsWingedEdge) {
+                    if (isCcw) {
+                        currEdgeReverse.faceRight = res
+                    } else {
+                        currEdgeReverse.faceLeft = res
+                    }
+                }
+                return res
+            }
+        } else if ((isCcw && currEdge.rightSucc instanceof WdsWingedEdge) || (!isCcw && currEdge.leftSucc instanceof WdsWingedEdge)) {
+            let res:number|undefined
+            if (isCcw && currEdge.rightSucc instanceof WdsWingedEdge) {
+                res = this.dfs(startEdge, currEdge.rightSucc, currEdge, isCcw)
+            } else if (currEdge.leftSucc instanceof WdsWingedEdge) {
+                res = this.dfs(startEdge, currEdge.leftSucc, currEdge, isCcw)
+            }
+            if (res) {
+                if (isCcw) {
+                    currEdge.faceLeft = res
+                } else {
+                    currEdge.faceRight = res
+                }
+                const currEdgeReverse = WingedEdgeGraph.getReversedEdge(currEdge)
+                if (currEdgeReverse instanceof WdsWingedEdge) {
+                    if (isCcw) {
+                        currEdgeReverse.faceRight = res
+                    } else {
+                        currEdgeReverse.faceLeft = res
+                    }
+                }
+                return res
+            }
+        } else if (WingedEdgeGraph.getDeg(currEdge.dst) === 3) {
+            const currEdgeReverse = WingedEdgeGraph.getReversedEdge(currEdge)
+            if (currEdgeReverse instanceof WdsWingedEdge) {
+                if (prevEdge === currEdge.rightPred && 
+                        currEdgeReverse.rightSucc instanceof WdsWingedEdge) {
+                    const res = this.dfs(startEdge, currEdgeReverse.rightSucc, currEdge, isCcw)
                     if (res) {
                         currEdge.faceLeft = res
-                        const currEdgeReverse = WingedEdgeGraph.getReversedEdge(currEdge)
-                        if (currEdgeReverse instanceof WdsWingedEdge) {
-                            currEdgeReverse.faceRight = res
-                        }
+                        currEdge.faceRight = res
+                        currEdgeReverse.faceLeft = res
+                        currEdgeReverse.faceRight = res
+                        return res
+                    }
+                } else if (prevEdge === currEdge.leftPred &&
+                        currEdgeReverse.leftSucc instanceof WdsWingedEdge) {
+                    const res = this.dfs(startEdge, currEdgeReverse.leftSucc, currEdge, isCcw)
+                    if (res) {
+                        currEdge.faceLeft = res
+                        currEdge.faceRight = res
+                        currEdgeReverse.faceLeft = res
+                        currEdgeReverse.faceRight = res
                         return res
                     }
                 }
@@ -395,10 +526,38 @@ export class WingedEdgeGraph {
         internalOfN1.outEdges = internalOfN1.outEdges.filter(edge => edge.dst !== n1)
         internalOfN2.outEdges.push(n2ToMp)
         this.nodes = this.nodes.filter(node => (node !== n1) && (node !== n2))
+        this.wingedEdges.push(mpToN2, n2ToMp, mpToN1, n1ToMp)
 
         // for n <= 2 this will do
         // run dfs starting from one of the new winged edges (updating faces if there is a new one)
-        this.dfs(n1ToMp, mpToN2, n1ToMp)
+        const polygonPoints = []
+        WingedEdgeGraph.getPolygon(n1ToMp, mpToN2, n1ToMp, polygonPoints)
+        const isCcw = isCCW(polygonPoints)
+        if (isCcw) {
+            console.log("ccw")
+        } else {
+            console.log("cw")
+        }
+        if (isCcw === undefined) {
+            console.log("Error calculating polygon orientation")
+            return
+        }
+        const originalFace = isCcw ? mpToN2.faceLeft : mpToN2.faceRight
+        const newFace = this.dfs(n1ToMp, mpToN2, n1ToMp, isCcw)
+        if (newFace !== undefined) {
+            for (const edge of this.wingedEdges) {
+                // not on edge, but is totally inside
+                if (edge.polyline.every(pt => !isPointOnPolygon(pt, polygonPoints)) 
+                    && edge.polyline.every(pt => isPointInPolygon(pt, polygonPoints))) {
+                    if (edge.faceLeft === originalFace) {
+                        edge.faceLeft = newFace
+                    }
+                    if (edge.faceRight === originalFace) {
+                        edge.faceRight = newFace
+                    }
+                }
+            }
+        }
         this.nodes.push(npl, npr)
 
         // for n > 2 we might have an some structure enclosed in a face, which means...
@@ -412,7 +571,7 @@ export class WingedEdgeGraph {
         return {p1:left, p2:right, p3:midpoint}
     }
 
-    static createCross(center:Point):CrossObj {
+    createCross(center:Point):CrossObj {
         const n1 = new WdsNode(new Point(center.x, center.y-30))
         const n2 = new WdsNode(new Point(center.x+30, center.y))
         const n3 = new WdsNode(new Point(center.x, center.y+30))
@@ -438,6 +597,8 @@ export class WingedEdgeGraph {
         n5.outEdges.push(n5ToN1, n5ToN4, n5ToN6)
         n6.outEdges.push(n6ToN2, n6ToN3, n6ToN5)
 
+        this.nodes.push(n1, n2, n3, n4)
+        this.wingedEdges.push(n5ToN6, n6ToN5)
         return {nodes: [n1, n2, n3, n4], edges: [n1ToN5, n4ToN5, n3ToN6, n2ToN6, n6ToN5]}
     }
 }

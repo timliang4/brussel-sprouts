@@ -2,17 +2,13 @@
 winged_ds.ts
 Modified Winged Edge Datastructure for identifying faces in planar graphs in O(1) time
 */
+import { UnionFindNode, UnionFind } from "./UnionFind.ts"
+import {Point, TriPointTuple, SuccessorsObj, CrossObj, 
+    getMidpointAndSplitLine, isReversedPolyline,
+    isPointOnPolygon, isCCW, isPointInPolygon, findPerpendicularPoints
+} from "./GfxLib.ts"
 
 // Classes and Interfaces
-export class Point {
-    x:number
-    y:number
-    constructor(x:number, y:number) {
-        this.x=x
-        this.y=y
-    }
-}
-
 export class WdsNode {
     pt:Point
     outEdges:Array<WdsEdge>
@@ -22,7 +18,7 @@ export class WdsNode {
     }
 }
 
-class WdsEdge {
+export class WdsEdge {
     src:WdsNode
     dst:WdsNode
     constructor(src:WdsNode, dst:WdsNode) {
@@ -51,115 +47,15 @@ class WdsWingedEdge extends WdsEdge {
     }
 }
 
-interface SplitLineObj {
-    midpoint:Point
-    firstLine:Array<Point>
-    secondLine:Array<Point>
-}
-
-interface PerpPointsObj {
-    left:Point
-    right:Point
-}
-
-interface TriPointTuple {
-    p1:Point
-    p2:Point
-    p3:Point
-}
-
-interface SuccessorsObj {
-    leftSucc:WdsEdge
-    rightSucc:WdsEdge
-}
-
-export interface CrossObj {
-    nodes:Array<WdsNode>
-    edges:Array<WdsEdge>
-}
-
-// Useful Graphics Functions
-function getMidpointAndSplitLine(polyline:Array<Point>):SplitLineObj {
-    const midpointIndex = Math.floor(polyline.length / 2)
-    return {
-        midpoint:polyline[midpointIndex], 
-        firstLine:polyline.slice(0, midpointIndex), 
-        secondLine:polyline.slice(midpointIndex + 1)
-    }
-}
-
-function graphicsToCartesian(p:Point):Point {
-    return new Point(p.x, -p.y)
-}
-
-function cartesianToGraphics(p:Point):Point {
-    return new Point(p.x, -p.y)
-}
-
-function isReversedPolyline(p1:Array<Point>, p2:Array<Point>):boolean {
-    if (p1.length !== p2.length) {
-        return false
-    }
-    const n = p1.length
-    for (let i = 0; i < n; i++) {
-        if (p1[i] !== p2[n - i - 1]) {
-            return false
-        }
-    }
-    return true
-}
-
-function isPointOnPolygon(p:Point, pts:Array<Point>) {
-    for (const pt of pts) {
-        if (p.x === pt.x && p.y === pt.y) {
-            return true
-        }
-    }
-    return false
-}
-
-function isCCW(points:Array<Point>):boolean|undefined {
-    let area = 0;
-    const n = points.length;
-    
-    for (let i = 0; i < n; i++) {
-        const {x:x1, y:y1} = points[i];
-        const {x:x2, y:y2} = points[(i + 1) % n]; // next point, with wraparound
-        area += x1 * y2 - y1 * x2;
-    }
-
-    if (area > 0) {
-        return false
-    } else if (area < 0) {
-        return true
-    }
-}
-
-function isPointInPolygon(point:Point, polygonPoints:Array<Point>):boolean {
-    const {x, y} = point;
-    let inside = false;
-    const n = polygonPoints.length;
-    
-    for (let i = 0, j = n - 1; i < n; j = i++) {
-        const {x:xi, y:yi} = polygonPoints[i];
-        const {x:xj, y:yj} = polygonPoints[j];
-        
-        if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
-            inside = !inside;
-        }
-    }
-    
-    return inside;
-}
 
 export class WingedEdgeGraph {
-    nodes:Array<WdsNode>
+    nodes:Map<WdsNode, UnionFindNode>
     wingedEdges:Array<WdsWingedEdge>
     numFaces:number
-    // expects some already properly initialized graph as an edge list (bc no isolated vertices)
-    constructor(nodes:Array<WdsNode>, wingedEdges:Array<WdsWingedEdge>) {
-        this.nodes=nodes
-        this.wingedEdges=wingedEdges
+    // create empty winged edge graph
+    constructor() {
+        this.nodes = new Map()
+        this.wingedEdges=[]
         this.numFaces=1
     }
 
@@ -193,29 +89,6 @@ export class WingedEdgeGraph {
         return -1
     }
 
-    // returns left and right points with respect to CCW direction
-    // O(1)
-    static findPerpendicularPoints(p1:Point, p2:Point, d:number):PerpPointsObj {
-        // CONVERT TO CARTESIAN 
-        const p1Cartesian = graphicsToCartesian(p1)
-        const p2Cartesian = graphicsToCartesian(p2)
-
-        let dirX = p2Cartesian.x - p1Cartesian.x;
-        let dirY = p2Cartesian.y - p1Cartesian.y;
-        
-        let scale = d / Math.sqrt(dirX * dirX + dirY * dirY);
-    
-        // Counterclockwise direction (rotate 90 degrees)
-        const leftCartesian = new Point(p1Cartesian.x - dirY * scale, p1Cartesian.y + dirX * scale)
-        
-        // Clockwise direction (rotate -90 degrees)
-        const rightCartesian = new Point(p1Cartesian.x + dirY * scale, p1Cartesian.y - dirX * scale)
-        
-        return {
-            left: cartesianToGraphics(leftCartesian),
-            right: cartesianToGraphics(rightCartesian)
-        };
-    }
 
     // get successors based on how node is connected to winged edge
     // O(edge length)
@@ -236,7 +109,8 @@ export class WingedEdgeGraph {
                 }
             }
         } else if (WingedEdgeGraph.getDeg(nodeIncidentToWinged) === 4) {
-            const wingedEdges:Array<WdsWingedEdge> = nodeIncidentToWinged.outEdges.filter(edge => edge instanceof WdsWingedEdge)
+            const wingedEdges:Array<WdsWingedEdge> = nodeIncidentToWinged.outEdges.filter(edge => edge 
+                    instanceof WdsWingedEdge) as Array<WdsWingedEdge>
             const leftSucc:WdsWingedEdge = wingedEdges.filter(we => we.leftPred === outEdge)[0]
             const rightSucc:WdsWingedEdge = wingedEdges.filter(we => we.rightPred === outEdge)[0]
             if (leftSucc && rightSucc) {
@@ -287,12 +161,18 @@ export class WingedEdgeGraph {
         } else if (WingedEdgeGraph.getDeg(currEdge.dst) === 3) {
             const currEdgeReverse = WingedEdgeGraph.getReversedEdge(currEdge)
             if (currEdgeReverse instanceof WdsWingedEdge) {
-                if (prevEdge === currEdge.rightPred && 
-                        currEdgeReverse.rightSucc instanceof WdsWingedEdge) {
-                    WingedEdgeGraph.getPolygon(startEdge, currEdgeReverse.rightSucc, currEdge, polyline)
-                } else if (prevEdge === currEdge.leftPred &&
-                        currEdgeReverse.leftSucc instanceof WdsWingedEdge) {
-                    WingedEdgeGraph.getPolygon(startEdge, currEdgeReverse.leftSucc, currEdge, polyline)
+                if (prevEdge === currEdge.rightPred) { 
+                    if (currEdgeReverse.rightSucc instanceof WdsWingedEdge) {
+                        WingedEdgeGraph.getPolygon(startEdge, currEdgeReverse.rightSucc, currEdge, polyline)
+                    } else if (currEdgeReverse.leftSucc instanceof WdsWingedEdge) {
+                        WingedEdgeGraph.getPolygon(startEdge, currEdgeReverse.leftSucc, currEdge, polyline)
+                    }
+                } else if (prevEdge === currEdge.leftPred) { 
+                    if (currEdgeReverse.leftSucc instanceof WdsWingedEdge) {
+                        WingedEdgeGraph.getPolygon(startEdge, currEdgeReverse.leftSucc, currEdge, polyline)
+                    } else if (currEdgeReverse.rightSucc instanceof WdsWingedEdge) {
+                        WingedEdgeGraph.getPolygon(startEdge, currEdgeReverse.rightSucc, currEdge, polyline)
+                    }
                 }
             }
         }
@@ -394,28 +274,28 @@ export class WingedEdgeGraph {
                 return res
             }
         } else if (WingedEdgeGraph.getDeg(currEdge.dst) === 3) {
+            let res:number|undefined
             const currEdgeReverse = WingedEdgeGraph.getReversedEdge(currEdge)
             if (currEdgeReverse instanceof WdsWingedEdge) {
-                if (prevEdge === currEdge.rightPred && 
-                        currEdgeReverse.rightSucc instanceof WdsWingedEdge) {
-                    const res = this.dfs(startEdge, currEdgeReverse.rightSucc, currEdge, isCcw)
-                    if (res) {
-                        currEdge.faceLeft = res
-                        currEdge.faceRight = res
-                        currEdgeReverse.faceLeft = res
-                        currEdgeReverse.faceRight = res
-                        return res
+                if (prevEdge === currEdge.rightPred) { 
+                    if (currEdgeReverse.rightSucc instanceof WdsWingedEdge) {
+                        res = this.dfs(startEdge, currEdgeReverse.rightSucc, currEdge, isCcw)
+                    } else if (currEdgeReverse.leftSucc instanceof WdsWingedEdge) {
+                        res = this.dfs(startEdge, currEdgeReverse.leftSucc, currEdge, isCcw)
                     }
-                } else if (prevEdge === currEdge.leftPred &&
-                        currEdgeReverse.leftSucc instanceof WdsWingedEdge) {
-                    const res = this.dfs(startEdge, currEdgeReverse.leftSucc, currEdge, isCcw)
-                    if (res) {
-                        currEdge.faceLeft = res
-                        currEdge.faceRight = res
-                        currEdgeReverse.faceLeft = res
-                        currEdgeReverse.faceRight = res
-                        return res
+                } else if (prevEdge === currEdge.leftPred) { 
+                    if (currEdgeReverse.leftSucc instanceof WdsWingedEdge) {
+                        res = this.dfs(startEdge, currEdgeReverse.leftSucc, currEdge, isCcw)
+                    } else if (currEdgeReverse.rightSucc instanceof WdsWingedEdge) {
+                        res = this.dfs(startEdge, currEdgeReverse.rightSucc, currEdge, isCcw)
                     }
+                }
+                if (res) {
+                    currEdge.faceLeft = res
+                    currEdge.faceRight = res
+                    currEdgeReverse.faceLeft = res
+                    currEdgeReverse.faceRight = res
+                    return res
                 }
             }
         }
@@ -428,13 +308,15 @@ export class WingedEdgeGraph {
     addSuperEdge(n1:WdsNode, n2:WdsNode, polyline:Array<Point>):TriPointTuple|undefined {
         const {midpoint, firstLine, secondLine} = getMidpointAndSplitLine(polyline)
         const face = WingedEdgeGraph.getFace(n1)
+        const inSameCC:boolean = UnionFind.sameSet(this.nodes.get(n1) as UnionFindNode, 
+                this.nodes.get(n2) as UnionFindNode)
         if (face === -1) {
             return
         }
 
         // updating the graph
         // find x,y coords for new nodes
-        const {left, right} = WingedEdgeGraph.findPerpendicularPoints(midpoint, secondLine[0], 10)
+        const {left, right} = findPerpendicularPoints(midpoint, secondLine[0], 10)
 
         // create 3 new nodes (midpoint, newn1, newn2)
         const mp = new WdsNode(midpoint)
@@ -525,47 +407,55 @@ export class WingedEdgeGraph {
         internalOfN2.outEdges = internalOfN2.outEdges.filter(edge => edge.dst !== n2)
         internalOfN1.outEdges = internalOfN1.outEdges.filter(edge => edge.dst !== n1)
         internalOfN2.outEdges.push(n2ToMp)
-        this.nodes = this.nodes.filter(node => (node !== n1) && (node !== n2))
+
+        // update hashmap
+        this.nodes.set(npl, UnionFind.makeSet(npl))
+        UnionFind.union(this.nodes.get(npl) as UnionFindNode, this.nodes.get(n1) as UnionFindNode)
+        this.nodes.set(npr, UnionFind.makeSet(npr))
+        UnionFind.union(this.nodes.get(npr) as UnionFindNode, this.nodes.get(n2) as UnionFindNode)
+        UnionFind.union(this.nodes.get(npl) as UnionFindNode, this.nodes.get(npr) as UnionFindNode)
+
+        // don't need n1 and n2 anymore, although they will still be used in the union find data structure
+        this.nodes.forEach((_, node) => {
+            if (node === n1 || node === n2) {
+                this.nodes.delete(node)
+            }
+        })
+
+        // update edge list with new winged edges
         this.wingedEdges.push(mpToN2, n2ToMp, mpToN1, n1ToMp)
 
-        // for n <= 2 this will do
-        // run dfs starting from one of the new winged edges (updating faces if there is a new one)
-        const polygonPoints = []
-        WingedEdgeGraph.getPolygon(n1ToMp, mpToN2, n1ToMp, polygonPoints)
-        const isCcw = isCCW(polygonPoints)
-        if (isCcw) {
-            console.log("ccw")
-        } else {
-            console.log("cw")
-        }
-        if (isCcw === undefined) {
-            console.log("Error calculating polygon orientation")
-            return
-        }
-        const originalFace = isCcw ? mpToN2.faceLeft : mpToN2.faceRight
-        const newFace = this.dfs(n1ToMp, mpToN2, n1ToMp, isCcw)
-        if (newFace !== undefined) {
-            for (const edge of this.wingedEdges) {
-                // not on edge, but is totally inside
-                if (edge.polyline.every(pt => !isPointOnPolygon(pt, polygonPoints)) 
-                    && edge.polyline.every(pt => isPointInPolygon(pt, polygonPoints))) {
-                    if (edge.faceLeft === originalFace) {
-                        edge.faceLeft = newFace
-                    }
-                    if (edge.faceRight === originalFace) {
-                        edge.faceRight = newFace
+        // need to update faces
+        if (inSameCC) {
+            const polygonPoints:Array<Point> = []
+            WingedEdgeGraph.getPolygon(n1ToMp, mpToN2, n1ToMp, polygonPoints)
+            let isCcw = isCCW(polygonPoints)
+            if (isCcw) {
+                console.log("ccw")
+            } else {
+                console.log("cw")
+            }
+            if (isCcw === undefined) {
+                // shouldn't matter
+                isCcw = true
+            }
+            const originalFace = isCcw ? mpToN2.faceLeft : mpToN2.faceRight
+            const newFace = this.dfs(n1ToMp, mpToN2, n1ToMp, isCcw)
+            if (newFace !== undefined) {
+                for (const edge of this.wingedEdges) {
+                    // not on edge, but is totally inside
+                    if (edge.polyline.every(pt => !isPointOnPolygon(pt, polygonPoints)) 
+                        && edge.polyline.every(pt => isPointInPolygon(pt, polygonPoints))) {
+                        if (edge.faceLeft === originalFace) {
+                            edge.faceLeft = newFace
+                        }
+                        if (edge.faceRight === originalFace) {
+                            edge.faceRight = newFace
+                        }
                     }
                 }
             }
         }
-        this.nodes.push(npl, npr)
-
-        // for n > 2 we might have an some structure enclosed in a face, which means...
-            // two DFS:
-            // DFS 1: check if cycle, use shoelace thm to find out if we actually went the right way
-            // If DFS 1 found a cycle, update winged edges in cycle + get all points for the polygon
-            // iterate through all edges. If any winged edge is in the closed polygon that has the old face, update
-            // NOTE: runtime on this might be heinous
 
         // return points newn1 and newn2 for frontend
         return {p1:left, p2:right, p3:midpoint}
@@ -597,7 +487,17 @@ export class WingedEdgeGraph {
         n5.outEdges.push(n5ToN1, n5ToN4, n5ToN6)
         n6.outEdges.push(n6ToN2, n6ToN3, n6ToN5)
 
-        this.nodes.push(n1, n2, n3, n4)
+        this.nodes.set(n1, UnionFind.makeSet(n1))
+        this.nodes.set(n2, UnionFind.makeSet(n2)) 
+        UnionFind.union(this.nodes.get(n1) as UnionFindNode, this.nodes.get(n2) as UnionFindNode)
+        this.nodes.set(n3, UnionFind.makeSet(n3))
+        UnionFind.union(this.nodes.get(n1) as UnionFindNode, this.nodes.get(n3) as UnionFindNode)
+        this.nodes.set(n4, UnionFind.makeSet(n4))
+        UnionFind.union(this.nodes.get(n1) as UnionFindNode, this.nodes.get(n4) as UnionFindNode)
+        this.nodes.set(n5, UnionFind.makeSet(n5))
+        UnionFind.union(this.nodes.get(n1) as UnionFindNode, this.nodes.get(n5) as UnionFindNode)
+        this.nodes.set(n6, UnionFind.makeSet(n6))
+        UnionFind.union(this.nodes.get(n1) as UnionFindNode, this.nodes.get(n6) as UnionFindNode)
         this.wingedEdges.push(n5ToN6, n6ToN5)
         return {nodes: [n1, n2, n3, n4], edges: [n1ToN5, n4ToN5, n3ToN6, n2ToN6, n6ToN5]}
     }

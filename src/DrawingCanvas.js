@@ -1,25 +1,33 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Stage, Layer, Line, Circle, } from 'react-konva';
-import { Point, WingedEdgeGraph} from './winged_ds.ts'
+import { Stage, Layer, Line, Circle } from 'react-konva';
+import { WingedEdgeGraph } from './winged_ds.ts'
+import { Point } from './GfxLib.ts'
 
-function getColor(faceNum) {
-  switch(faceNum) {
-    case 0:
-      return "#fc0303"
-    case 1:
-      return "#0703fc"
-    case 2:
-      return "#fce803"
-    case 3:
-      return "#03fc20"
-    case 4:
-      return "#fc03e8"
-    case 5:
-      return "#7b03fc"
-    default:
-      return "#03f4fc"
-  }
-}
+const colors = 
+[
+  "#FF5733",  // vibrant orange-red
+  "#33FF57",  // bright green
+  "#5733FF",  // electric purple
+  "#FF33A1",  // hot pink
+  "#33FFF5",  // cyan
+  "#FF8C33",  // warm orange
+  "#F533FF",  // magenta
+  "#FF5733",  // deep red
+  "#33D4FF",  // sky blue
+  "#8CFF33",  // lime green
+  "#FF3380",  // bright pink
+  "#6A33FF",  // deep purple
+  "#FFB533",  // amber
+  "#33FF87",  // light green
+  "#FF5733",  // coral
+  "#2D33FF",  // blue
+  "#FFD133",  // mustard yellow
+  "#FF5733",  // rose
+  "#FF3370",  // deep pink
+  "#33FFE0"   // turquoise
+]
+
+const numCrosses = 1
 
 const DrawComponent = () => {
   const [lines, setLines] = useState([]); // Holds all lines
@@ -32,11 +40,32 @@ const DrawComponent = () => {
   const selfProximityThreshold = 10 
 
   useEffect(() => {
-    modelRef.current = new WingedEdgeGraph([], []);
-    const c1 = modelRef.current.createCross(new Point(600, 400))
-    const c2 = modelRef.current.createCross(new Point(900, 400))
-    setLines([...c1.edges.map(edge => [edge.src.pt, edge.dst.pt]), ...c2.edges.map(edge => [edge.src.pt, edge.dst.pt])])
-    setNodes([...c1.nodes, ...c2.nodes])
+    let crosses = []
+    modelRef.current = new WingedEdgeGraph();
+    if (numCrosses === 1) {
+      console.log(window.innerHeight / 2)
+      console.log(window.innerWidth / 2)
+      const c1 = modelRef.current.createCross(new Point(window.innerWidth / 2, window.innerHeight / 2))
+      crosses.push(c1)
+    } else if (numCrosses === 2) {
+      const c1 = modelRef.current.createCross(new Point(window.innerWidth / 3, window.innerHeight / 2))
+      const c2 = modelRef.current.createCross(new Point(2 * (window.innerWidth / 3), window.innerHeight / 2))
+      crosses.push(c1, c2)
+    } else if (numCrosses === 3) {
+      const c1 = modelRef.current.createCross(new Point(window.innerWidth / 2, window.innerHeight / 3))
+      const c2 = modelRef.current.createCross(new Point(window.innerWidth / 3, 2 * (window.innerHeight / 3)))
+      const c3 = modelRef.current.createCross(new Point(2 * (window.innerWidth / 3), 2 * (window.innerHeight / 3)))
+      crosses.push(c1, c2, c3)
+    } else if (numCrosses === 4) {
+      const c1 = modelRef.current.createCross(new Point(window.innerWidth / 3, window.innerHeight / 3))
+      const c2 = modelRef.current.createCross(new Point(2 * (window.innerWidth / 3), window.innerHeight / 3))
+      const c3 = modelRef.current.createCross(new Point(window.innerWidth / 3, 2 * (window.innerHeight / 3)))
+      const c4 = modelRef.current.createCross(new Point(2 * (window.innerWidth / 3), 2 * (window.innerHeight / 3)))
+      crosses.push(c1, c2, c3, c4)
+    }
+    console.log(crosses.reduce((acc, val) => [...acc, ...val.edges.map(edge => [edge.src.pt, edge.dst.pt])], []))
+    setLines(crosses.reduce((acc, val) => [...acc, ...val.edges.map(edge => [edge.src.pt, edge.dst.pt])], []))
+    setNodes(crosses.reduce((acc, val) => [...acc, ...val.nodes], []))
   }, []); // Empty dependency array ensures this runs once, when the component mounts
   
   // Function to calculate the distance between two points
@@ -166,8 +195,8 @@ const DrawComponent = () => {
         const node = isCloseToFreeNode(pos)
         if (node) {
           if (node !== startNodeRef.current) {
-            const {p1:left, p2:right, p3:mid} = modelRef.current.addSuperEdge(startNodeRef.current, node, newLine.slice(1))
-            setNodes(modelRef.current.nodes)
+            const { p1:left, p2:right, p3:mid } = modelRef.current.addSuperEdge(startNodeRef.current, node, newLine.slice(1))
+            setNodes(Array.from(modelRef.current.nodes.keys()))
             setLines([...lines, [...newLine, node.pt], [mid, left], [mid, right]])
             setIsDrawing(false)
             setCurrentLine([])
@@ -224,7 +253,7 @@ const DrawComponent = () => {
           <Circle
             key={idx}
             radius={3}
-            fill={getColor(WingedEdgeGraph.getFace(node))}
+            fill={colors[WingedEdgeGraph.getFace(node)]}
             x={node.pt.x}
             y={node.pt.y}
           />

@@ -2,6 +2,25 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Stage, Layer, Line, Circle, } from 'react-konva';
 import { Point, WingedEdgeGraph} from './winged_ds.ts'
 
+function getColor(faceNum) {
+  switch(faceNum) {
+    case 0:
+      return "#fc0303"
+    case 1:
+      return "#0703fc"
+    case 2:
+      return "#fce803"
+    case 3:
+      return "#03fc20"
+    case 4:
+      return "#fc03e8"
+    case 5:
+      return "#7b03fc"
+    default:
+      return "#03f4fc"
+  }
+}
+
 const DrawComponent = () => {
   const [lines, setLines] = useState([]); // Holds all lines
   const [currentLine, setCurrentLine] = useState([]); // Current line being drawn
@@ -210,7 +229,7 @@ const DrawComponent = () => {
           <Circle
             key={idx}
             radius={3}
-            fill="red"
+            fill={getColor(WingedEdgeGraph.getFace(node))}
             x={node.pt.x}
             y={node.pt.y}
           />

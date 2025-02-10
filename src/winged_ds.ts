@@ -127,7 +127,7 @@ export class WingedEdgeGraph {
     // given a 1 degree node in the graph, return the id of its face
     // returns -1 if not 1 degree node, id of face otherwise
     // O(1)
-    getFace(node:WdsNode):number {
+    static getFace(node:WdsNode):number {
         if (WingedEdgeGraph.getDeg(node) !== 1) {
             console.log("Node not leaf")
             return -1
@@ -296,7 +296,7 @@ export class WingedEdgeGraph {
     // O(n) where n = # of nodes
     addSuperEdge(n1:WdsNode, n2:WdsNode, polyline:Array<Point>):TriPointTuple|undefined {
         const {midpoint, firstLine, secondLine} = getMidpointAndSplitLine(polyline)
-        const face = this.getFace(n1)
+        const face = WingedEdgeGraph.getFace(n1)
         if (face === -1) {
             return
         }

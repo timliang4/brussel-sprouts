@@ -70,7 +70,6 @@ export class WingedEdgeGraph {
     // O(1)
     static getFace(node:WdsNode):number {
         if (WingedEdgeGraph.getDeg(node) !== 1) {
-            console.log("Node not leaf")
             return -1
         }
         const outEdge = node.outEdges[0]
@@ -85,7 +84,6 @@ export class WingedEdgeGraph {
                 }
             }
         }
-        console.log("getFace Unexpected Error")
         return -1
     }
 
@@ -94,7 +92,7 @@ export class WingedEdgeGraph {
     // O(edge length)
     static getSuccessors(node:WdsNode):SuccessorsObj|undefined {
         if (WingedEdgeGraph.getDeg(node) !== 1) {
-            console.log("Node not a leaf")
+            return
         }
         const outEdge = node.outEdges[0]
         const nodeIncidentToWinged = outEdge.dst

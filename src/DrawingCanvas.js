@@ -45,8 +45,6 @@ const DrawComponent = (props) => {
     let crosses = []
     modelRef.current = new WingedEdgeGraph();
     if (props.numCrosses === 1) {
-      console.log(window.innerHeight / 2)
-      console.log(window.innerWidth / 2)
       const c1 = modelRef.current.createCross(new Point(window.innerWidth / 2, (window.innerHeight / 2) - (window.innerHeight / 5)))
       crosses.push(c1)
     } else if (props.numCrosses === 2) {
@@ -65,7 +63,6 @@ const DrawComponent = (props) => {
       const c4 = modelRef.current.createCross(new Point(2 * (window.innerWidth / 3), (2 * (window.innerHeight / 3)) - (window.innerHeight / 5)))
       crosses.push(c1, c2, c3, c4)
     }
-    console.log(crosses.reduce((acc, val) => [...acc, ...val.edges.map(edge => [edge.src.pt, edge.dst.pt])], []))
     setLines(crosses.reduce((acc, val) => [...acc, ...val.edges.map(edge => [edge.src.pt, edge.dst.pt])], []))
     setNodes(crosses.reduce((acc, val) => [...acc, ...val.nodes], []))
   }, [props.numCrosses]); // Empty dependency array ensures this runs once, when the component mounts
@@ -171,8 +168,6 @@ const DrawComponent = (props) => {
 
   const noMorePossibleMoves = () => {
     const faces = Array.from(modelRef.current.nodes.keys()).map(node => WingedEdgeGraph.getFace(node))
-    console.log(faces)
-    console.log(new Set(faces))
     if (faces.length === (new Set(faces)).size) {
       return true
     }
@@ -209,12 +204,10 @@ const DrawComponent = (props) => {
           if (node !== startNodeRef.current) {
             const res = modelRef.current.addSuperEdge(startNodeRef.current, node, newLine.slice(1))
             if (res === undefined) {
-              console.log("Invalid move, restarting...")
               return
             }
             const { p1:left, p2:right, p3:mid } = res 
             if (left.x === -1) {
-              console.log("Line must be between nodes of the same face")
               return
             }
             setNodes(Array.from(modelRef.current.nodes.keys()))

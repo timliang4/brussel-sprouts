@@ -307,12 +307,13 @@ export class WingedEdgeGraph {
     // O(n) where n = # of nodes
     addSuperEdge(n1:WdsNode, n2:WdsNode, polyline:Array<Point>):TriPointTuple|undefined {
         const {midpoint, firstLine, secondLine} = getMidpointAndSplitLine(polyline)
-        const face = WingedEdgeGraph.getFace(n1)
+        const face1 = WingedEdgeGraph.getFace(n1)
+        const face2 = WingedEdgeGraph.getFace(n2)
+        if (face1 !== face2) {
+            return {p1: new Point(-1, -1), p2: new Point(-1, -1), p3: new Point(-1, -1)}
+        }
         const inSameCC:boolean = UnionFind.sameSet(this.nodes.get(n1) as UnionFindNode, 
                 this.nodes.get(n2) as UnionFindNode)
-        if (face === -1) {
-            return
-        }
 
         // updating the graph
         // find x,y coords for new nodes
@@ -342,9 +343,9 @@ export class WingedEdgeGraph {
         }
         const {leftSucc:leftSuccN1, rightSucc:rightSuccN1} = succObj
         mpToN1 = new WdsWingedEdge(mp, internalOfN1, [...firstLine].reverse(), nprToMp, leftSuccN1, 
-                nplToMp, rightSuccN1, face)
+                nplToMp, rightSuccN1, face1)
         n1ToMp = new WdsWingedEdge(internalOfN1, mp, firstLine, WingedEdgeGraph.getReversedEdge(rightSuccN1), 
-                mpToNpl, WingedEdgeGraph.getReversedEdge(leftSuccN1), mpToNpr, face)
+                mpToNpl, WingedEdgeGraph.getReversedEdge(leftSuccN1), mpToNpr, face1)
         if (leftSuccN1 instanceof WdsWingedEdge) {
             leftSuccN1.leftPred = mpToN1
         }
@@ -372,9 +373,9 @@ export class WingedEdgeGraph {
         }
         const {leftSucc:leftSuccN2, rightSucc:rightSuccN2} = succObj
         mpToN2 = new WdsWingedEdge(mp, internalOfN2, secondLine, nplToMp, leftSuccN2, 
-                nprToMp, rightSuccN2, face)
+                nprToMp, rightSuccN2, face1)
         n2ToMp = new WdsWingedEdge(internalOfN2, mp, [...secondLine].reverse(), 
-                WingedEdgeGraph.getReversedEdge(rightSuccN2), mpToNpr, WingedEdgeGraph.getReversedEdge(leftSuccN2), mpToNpl, face)
+                WingedEdgeGraph.getReversedEdge(rightSuccN2), mpToNpr, WingedEdgeGraph.getReversedEdge(leftSuccN2), mpToNpl, face1)
         if (leftSuccN2 instanceof WdsWingedEdge) {
             leftSuccN2.leftPred = mpToN2
         }
@@ -430,11 +431,6 @@ export class WingedEdgeGraph {
             const polygonPoints:Array<Point> = []
             WingedEdgeGraph.getPolygon(n1ToMp, mpToN2, n1ToMp, polygonPoints)
             let isCcw = isCCW(polygonPoints)
-            if (isCcw) {
-                console.log("ccw")
-            } else {
-                console.log("cw")
-            }
             if (isCcw === undefined) {
                 // shouldn't matter
                 isCcw = true
@@ -494,10 +490,10 @@ export class WingedEdgeGraph {
         UnionFind.union(this.nodes.get(n1) as UnionFindNode, this.nodes.get(n3) as UnionFindNode)
         this.nodes.set(n4, UnionFind.makeSet(n4))
         UnionFind.union(this.nodes.get(n1) as UnionFindNode, this.nodes.get(n4) as UnionFindNode)
-        this.nodes.set(n5, UnionFind.makeSet(n5))
-        UnionFind.union(this.nodes.get(n1) as UnionFindNode, this.nodes.get(n5) as UnionFindNode)
-        this.nodes.set(n6, UnionFind.makeSet(n6))
-        UnionFind.union(this.nodes.get(n1) as UnionFindNode, this.nodes.get(n6) as UnionFindNode)
+        // this.nodes.set(n5, UnionFind.makeSet(n5))
+        // UnionFind.union(this.nodes.get(n1) as UnionFindNode, this.nodes.get(n5) as UnionFindNode)
+        // this.nodes.set(n6, UnionFind.makeSet(n6))
+        // UnionFind.union(this.nodes.get(n1) as UnionFindNode, this.nodes.get(n6) as UnionFindNode)
         this.wingedEdges.push(n5ToN6, n6ToN5)
         return {nodes: [n1, n2, n3, n4], edges: [n1ToN5, n4ToN5, n3ToN6, n2ToN6, n6ToN5]}
     }

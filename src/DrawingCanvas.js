@@ -27,46 +27,48 @@ const colors =
   "#33FFE0"   // turquoise
 ]
 
-const numCrosses = 1
 
-const DrawComponent = () => {
+
+const DrawComponent = (props) => {
   const [lines, setLines] = useState([]); // Holds all lines
   const [currentLine, setCurrentLine] = useState([]); // Current line being drawn
   const [isDrawing, setIsDrawing] = useState(false); // To track if the user is drawing
   const startNodeRef = useRef(null)
   const [nodes, setNodes] = useState([]); // free nodes
+  const [isPlayerOnesTurn, setIsPlayerOnesTurn] = useState(true)
+  const [isGameOver, setIsGameOver] = useState(false)
   const modelRef = useRef(null);
-  const proximityThreshold = 10; // Minimum distance to stop drawing (proximity)
-  const selfProximityThreshold = 10 
+  const proximityThreshold = 12; // Minimum distance to stop drawing (proximity)
+  const snapThreshold = 15
 
   useEffect(() => {
     let crosses = []
     modelRef.current = new WingedEdgeGraph();
-    if (numCrosses === 1) {
+    if (props.numCrosses === 1) {
       console.log(window.innerHeight / 2)
       console.log(window.innerWidth / 2)
-      const c1 = modelRef.current.createCross(new Point(window.innerWidth / 2, window.innerHeight / 2))
+      const c1 = modelRef.current.createCross(new Point(window.innerWidth / 2, (window.innerHeight / 2) - (window.innerHeight / 5)))
       crosses.push(c1)
-    } else if (numCrosses === 2) {
-      const c1 = modelRef.current.createCross(new Point(window.innerWidth / 3, window.innerHeight / 2))
-      const c2 = modelRef.current.createCross(new Point(2 * (window.innerWidth / 3), window.innerHeight / 2))
+    } else if (props.numCrosses === 2) {
+      const c1 = modelRef.current.createCross(new Point(window.innerWidth / 3, (window.innerHeight / 2) - (window.innerHeight / 5)))
+      const c2 = modelRef.current.createCross(new Point(2 * (window.innerWidth / 3), (window.innerHeight / 2) - (window.innerHeight / 5)))
       crosses.push(c1, c2)
-    } else if (numCrosses === 3) {
-      const c1 = modelRef.current.createCross(new Point(window.innerWidth / 2, window.innerHeight / 3))
-      const c2 = modelRef.current.createCross(new Point(window.innerWidth / 3, 2 * (window.innerHeight / 3)))
-      const c3 = modelRef.current.createCross(new Point(2 * (window.innerWidth / 3), 2 * (window.innerHeight / 3)))
+    } else if (props.numCrosses === 3) {
+      const c1 = modelRef.current.createCross(new Point(window.innerWidth / 2, (window.innerHeight / 3) - (window.innerHeight / 5)))
+      const c2 = modelRef.current.createCross(new Point(window.innerWidth / 3, (2 * (window.innerHeight / 3)) - (window.innerHeight / 5)))
+      const c3 = modelRef.current.createCross(new Point(2 * (window.innerWidth / 3), (2 * (window.innerHeight / 3)) - (window.innerHeight / 5)))
       crosses.push(c1, c2, c3)
-    } else if (numCrosses === 4) {
-      const c1 = modelRef.current.createCross(new Point(window.innerWidth / 3, window.innerHeight / 3))
-      const c2 = modelRef.current.createCross(new Point(2 * (window.innerWidth / 3), window.innerHeight / 3))
-      const c3 = modelRef.current.createCross(new Point(window.innerWidth / 3, 2 * (window.innerHeight / 3)))
-      const c4 = modelRef.current.createCross(new Point(2 * (window.innerWidth / 3), 2 * (window.innerHeight / 3)))
+    } else if (props.numCrosses === 4) {
+      const c1 = modelRef.current.createCross(new Point(window.innerWidth / 3, (window.innerHeight / 3) - (window.innerHeight / 5)))
+      const c2 = modelRef.current.createCross(new Point(2 * (window.innerWidth / 3), (window.innerHeight / 3) - (window.innerHeight / 5)))
+      const c3 = modelRef.current.createCross(new Point(window.innerWidth / 3, (2 * (window.innerHeight / 3)) - (window.innerHeight / 5)))
+      const c4 = modelRef.current.createCross(new Point(2 * (window.innerWidth / 3), (2 * (window.innerHeight / 3)) - (window.innerHeight / 5)))
       crosses.push(c1, c2, c3, c4)
     }
     console.log(crosses.reduce((acc, val) => [...acc, ...val.edges.map(edge => [edge.src.pt, edge.dst.pt])], []))
     setLines(crosses.reduce((acc, val) => [...acc, ...val.edges.map(edge => [edge.src.pt, edge.dst.pt])], []))
     setNodes(crosses.reduce((acc, val) => [...acc, ...val.nodes], []))
-  }, []); // Empty dependency array ensures this runs once, when the component mounts
+  }, [props.numCrosses]); // Empty dependency array ensures this runs once, when the component mounts
   
   // Function to calculate the distance between two points
   const distanceBetweenPoints = (p1, p2) => {
@@ -123,8 +125,8 @@ const DrawComponent = () => {
 
   const isLineTooCloseToItself = (newLine) => {
     const pos = newLine[newLine.length - 1]
-    for (let i = 0; i < newLine.length - 20; i++) {
-      if(distanceBetweenPoints(pos, newLine[i]) < selfProximityThreshold) {
+    for (let i = 0; i < newLine.length - (proximityThreshold * 2); i++) {
+      if(distanceBetweenPoints(pos, newLine[i]) < proximityThreshold) {
         return true
       }
     }
@@ -161,10 +163,20 @@ const DrawComponent = () => {
 
   const isCloseToFreeNode = (pos) => {
     for (const node of nodes) {
-      if (distanceBetweenPoints(pos, node.pt) <= 10) {
+      if (distanceBetweenPoints(pos, node.pt) <= snapThreshold) {
         return node
       }
     }
+  }
+
+  const noMorePossibleMoves = () => {
+    const faces = Array.from(modelRef.current.nodes.keys()).map(node => WingedEdgeGraph.getFace(node))
+    console.log(faces)
+    console.log(new Set(faces))
+    if (faces.length === (new Set(faces)).size) {
+      return true
+    }
+    return false
   }
 
   const handleMouseDown = (e) => {
@@ -195,11 +207,25 @@ const DrawComponent = () => {
         const node = isCloseToFreeNode(pos)
         if (node) {
           if (node !== startNodeRef.current) {
-            const { p1:left, p2:right, p3:mid } = modelRef.current.addSuperEdge(startNodeRef.current, node, newLine.slice(1))
+            const res = modelRef.current.addSuperEdge(startNodeRef.current, node, newLine.slice(1))
+            if (res === undefined) {
+              console.log("Invalid move, restarting...")
+              return
+            }
+            const { p1:left, p2:right, p3:mid } = res 
+            if (left.x === -1) {
+              console.log("Line must be between nodes of the same face")
+              return
+            }
             setNodes(Array.from(modelRef.current.nodes.keys()))
             setLines([...lines, [...newLine, node.pt], [mid, left], [mid, right]])
             setIsDrawing(false)
             setCurrentLine([])
+            if (noMorePossibleMoves()) {
+              setIsGameOver(true)
+            } else {
+              setIsPlayerOnesTurn(!isPlayerOnesTurn)
+            }
             return
           }
         } else {
@@ -230,44 +256,48 @@ const DrawComponent = () => {
   };
 
   return (
-    <Stage
-      width={window.innerWidth}
-      height={window.innerHeight}
-      onMouseDown={handleMouseDown} // Start drawing on mouse down
-      onMouseMove={handleMouseMove} // Track mouse movement
-      onMouseUp={handleMouseUp} // Complete drawing on mouse up
-    >
-      <Layer>
-        {/* Render all the previously drawn lines */}
-        {lines.map((line, idx) => (
+    <>
+      {isGameOver ? (isPlayerOnesTurn ? <h3>Player One Wins</h3> : <h3>Player Two Wins</h3>) 
+          : (isPlayerOnesTurn ? <h3>Player One's Turn</h3> : <h3>Player Two's Turn</h3>)}
+      <Stage
+        width={window.innerWidth}
+        height={window.innerHeight}
+        onMouseDown={handleMouseDown} // Start drawing on mouse down
+        onMouseMove={handleMouseMove} // Track mouse movement
+        onMouseUp={handleMouseUp} // Complete drawing on mouse up
+      >
+        <Layer>
+          {/* Render all the previously drawn lines */}
+          {lines.map((line, idx) => (
+            <Line
+              key={idx}
+              points={line.flatMap(p => [p.x, p.y])}
+              stroke="black"
+              strokeWidth={1}
+              lineJoin="round"
+              lineCap="round"
+            />
+          ))}
+          {nodes.map((node, idx) => (
+            <Circle
+              key={idx}
+              radius={2}
+              fill={colors[WingedEdgeGraph.getFace(node)]}
+              x={node.pt.x}
+              y={node.pt.y}
+            />
+          ))}
+          {/* Render the current line being drawn */}
           <Line
-            key={idx}
-            points={line.flatMap(p => [p.x, p.y])}
-            stroke="black"
-            strokeWidth={2}
+            points={currentLine.flatMap(p => [p.x, p.y])}
+            stroke="blue"
+            strokeWidth={1}
             lineJoin="round"
             lineCap="round"
           />
-        ))}
-        {nodes.map((node, idx) => (
-          <Circle
-            key={idx}
-            radius={3}
-            fill={colors[WingedEdgeGraph.getFace(node)]}
-            x={node.pt.x}
-            y={node.pt.y}
-          />
-        ))}
-        {/* Render the current line being drawn */}
-        <Line
-          points={currentLine.flatMap(p => [p.x, p.y])}
-          stroke="blue"
-          strokeWidth={2}
-          lineJoin="round"
-          lineCap="round"
-        />
-      </Layer>
-    </Stage>
+        </Layer>
+      </Stage>
+    </>
   );
 };
 

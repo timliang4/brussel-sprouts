@@ -1,15 +1,15 @@
 {
   "files": {
     "main.css": "/brussel-sprouts/static/css/main.f855e6bc.css",
-    "main.js": "/brussel-sprouts/static/js/main.1a988648.js",
+    "main.js": "/brussel-sprouts/static/js/main.4c5690ad.js",
     "static/js/488.1ad659ec.chunk.js": "/brussel-sprouts/static/js/488.1ad659ec.chunk.js",
     "index.html": "/brussel-sprouts/index.html",
     "main.f855e6bc.css.map": "/brussel-sprouts/static/css/main.f855e6bc.css.map",
-    "main.1a988648.js.map": "/brussel-sprouts/static/js/main.1a988648.js.map",
+    "main.4c5690ad.js.map": "/brussel-sprouts/static/js/main.4c5690ad.js.map",
     "488.1ad659ec.chunk.js.map": "/brussel-sprouts/static/js/488.1ad659ec.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.f855e6bc.css",
-    "static/js/main.1a988648.js"
+    "static/js/main.4c5690ad.js"
   ]
 }

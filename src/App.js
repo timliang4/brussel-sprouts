@@ -25,6 +25,7 @@ function App() {
         <option value="4">4 Crosses</option>
       </select>
       <DrawingComponent key={resetKey} numCrosses={parseInt(numCrosses)}></DrawingComponent>
+      <p><b>Note:</b> for any bugs/suggestions for improvement, feel free submit an issue or PR on the GitHub.</p>
     </div>
   );
 }
